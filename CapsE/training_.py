@@ -55,7 +55,6 @@ def computeP1(lstRanks):
             p1 += 1
     return p1 / len(lstRanks)
 
-
 def computeM1(results, lstOriginalRank):
     m = 0.0
     _start = 0
@@ -68,6 +67,18 @@ def computeM1(results, lstOriginalRank):
         _start = _end 
     return m / len(lstOriginalRank)
 
+def compute_ndcg_k(results, lstOriginalRank, k):
+    m = 0.0
+    _start = 0
+    for tmp in lstOriginalRank:
+        _end = _start + len(tmp)
+        # те номера, которые поставили в топ к
+        lstsorted = np.argsort(results[_start:_end])[:k]
+        d1 = np.sum(np.array([tmp[lstsorted[i]][0] for i in range(0, k)]) / np.array([np.log2(i+1) for i in range(1, k + 1)]))
+        d2 = sum([1/np.log2(i+1) for i in range(1, k + 1)])
+        m += d1 / d2
+        _start = _end 
+    return m / len(lstOriginalRank)
 
 def computeM2(results, lstOriginalRank):
     m = 0.0
@@ -91,8 +102,8 @@ def train_model(lst_embeddings_query,
                 num_filters=50, 
                 epochs=100, 
                 learning_rate=0.00001,
-                dataset='ARXIV', 
-                embedding_size=200):
+                dataset='ARXIV',
+                save_path='model'):
 
     with tf.Graph().as_default():
         session_conf = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
@@ -106,7 +117,7 @@ def train_model(lst_embeddings_query,
             capse = CapsE(sequence_length=2,
                           batch_size=20 * BATCH_SIZE,
                           initialization=[lst_embeddings_query, lst_embeddings_doc],
-                          embedding_size=embedding_size,
+                          embedding_size=768,
                           filter_size=1,
                           num_filters=num_filters,
                           iter_routing=1,
@@ -144,7 +155,11 @@ def train_model(lst_embeddings_query,
                     test_results = test_prediction(test_duplets, test_val_duplets, test_val_duplets, capse, sess, dataset='MIND')
                     test_m1 = computeM1(test_results, test_val_duplets)
                     test_m2 = computeM2(test_results, test_val_duplets)
-                    lsttest.append([test_m1, test_m2])
-                
+                    test_ngcd5 = compute_ndcg_k(test_results, test_val_duplets, 5)
+                    test_ngcd10 = compute_ndcg_k(test_results, test_val_duplets, 10)
+                    lsttest.append([test_m1, test_m2, test_ngcd5, test_ngcd10])
+            
+            saver = tf.train.Saver()
+            saver.save(sess, save_path)
                 
     return lsttest, losses

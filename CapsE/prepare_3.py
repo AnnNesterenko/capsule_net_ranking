@@ -232,3 +232,124 @@ def get_data_for_net_MIND(embeddings_file_train,
     return lst_embeddings_query, lst_embeddings_doc, \
            train_duplets, test_duplets, \
            train_val_duplets, test_val_duplets
+
+
+def get_data_for_net_MIND_plain_text(
+                          texts_train, 
+                          texts_test,
+                          behaviors_train,
+                          behaviors_test,
+                          SIZE=200):
+    
+    have_texts = set()
+    with codecs.open(texts_train) as f:
+        for line in f:
+            id_, _ = line.split(' ', maxsplit=1)
+            have_texts.add(id_)
+        
+    with codecs.open(texts_test) as f:
+        for line in f:
+            id_, _ = line.split(' ', maxsplit=1)
+            have_texts.add(id_)
+            
+    query_ids_unique = set()
+    doc_ids_unique = set()
+    
+    with codecs.open(behaviors_train) as f:
+        for line in f:
+            _, _, _, hist, impressions = line.split('\t')
+            queries = set(i for i in hist.split() if i in have_texts)
+            
+            docs_old = [i.split('-')[0] for i in impressions[:-1].split()]
+            docs = set(i for i in docs_old if i in have_texts)
+        
+            query_ids_unique = query_ids_unique | queries
+            doc_ids_unique = doc_ids_unique | docs
+        
+    with codecs.open(behaviors_test) as f:
+        for line in f:
+            _, _, _, hist, impressions = line.split('\t')
+            queries = set(i for i in hist.split() if i in have_texts)
+            
+            docs_old = [i.split('-')[0] for i in impressions[:-1].split()]
+            docs = set(i for i in docs_old if i in have_texts)
+        
+            query_ids_unique = query_ids_unique | queries
+            doc_ids_unique = doc_ids_unique | docs
+
+    query_ids_unique = list(query_ids_unique)
+    doc_ids_unique = list(doc_ids_unique)
+    
+    query_indexes = {}
+    indexes_query = {}
+
+    doc_indexes = {}
+    indexes_doc = {}
+
+    for i in range(len(query_ids_unique)):
+        id_ = query_ids_unique[i]
+        query_indexes[id_] = i
+        indexes_query[i] = id_
+    
+    for i in range(len(doc_ids_unique)):
+        id_ = doc_ids_unique[i]
+        doc_indexes[id_] = i
+        indexes_doc[i] = id_
+        
+    train_duplets, train_val_duplets = get_duplets_and_val_duplets(behaviors_train, texts_train, have_texts,
+                                                                  query_indexes, doc_indexes)
+    test_duplets, test_val_duplets = get_duplets_and_val_duplets(behaviors_test, texts_test, have_texts,
+                                                                query_indexes, doc_indexes)
+    
+    # список эмбеддингов для запросов и доков
+    lst_embeddings_query = []
+    for i in range(len(query_ids_unique)):
+        lst_embeddings_query.append([])
+        for j in range(SIZE):
+            lst_embeddings_query[i].append('')
+            
+    lst_embeddings_doc = []
+    for i in range(len(doc_ids_unique)):
+        lst_embeddings_doc.append([])
+        for j in range(SIZE):
+            lst_embeddings_doc[i].append('')
+    
+#     lst_embeddings_query = np.zeros((len(query_ids_unique), SIZE))
+#     lst_embeddings_doc = np.zeros((len(doc_ids_unique), SIZE))
+
+    with codecs.open(texts_train) as f:
+        for line in f:
+            id_, text = line.split(' ', maxsplit=1)
+            text = text[1:-1].split(' ')
+            if id_ in query_indexes:
+                lst_embeddings_query[query_indexes[id_]] = text
+            
+            if id_ in doc_indexes:
+                lst_embeddings_doc[doc_indexes[id_]] = text
+
+    with codecs.open(texts_test) as f:
+        for line in f:
+            id_, text = line.split(' ', maxsplit=1)
+            text = text[1:-1].split(' ')
+            if id_ in query_indexes:
+                lst_embeddings_query[query_indexes[id_]] = text
+            
+            if id_ in doc_indexes:
+                lst_embeddings_doc[doc_indexes[id_]] = text
+    
+    # вот тут нужно поколдовать насчет выборки не первых, а случайных
+    indexes_train = np.arange(len(train_duplets))
+    choice_train = np.random.choice(indexes_train, 20000)
+    
+    train_duplets = np.array([train_duplets[i] for i in choice_train])
+    train_val_duplets = np.array([train_val_duplets[i] for i in choice_train])
+    
+    indexes_test = np.arange(len(test_duplets))
+    choice_test = np.random.choice(indexes_test, 6000)
+
+    test_duplets = np.array([test_duplets[i] for i in choice_test])
+    test_val_duplets = np.array([test_val_duplets[i] for i in choice_test])
+    
+    return lst_embeddings_query, lst_embeddings_doc, \
+           train_duplets, test_duplets, \
+           train_val_duplets, test_val_duplets
